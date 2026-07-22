@@ -1814,6 +1814,9 @@ function startNight(note){
   earn:0,tips:0,drinks:0,servedC:{},teas:0,beers:0,left:0,leftVal:0,
   done:false,doneT:0,t:0,floats:[],coins:[],empty:total===0,saved:false,pour:null,
   note:note||(G.day===1?'Chef Ume cooks the tickets — click a customer when their dish is ready':'')};
+ if(!night.empty){let any=false;
+  for(const id in night.stock){if(night.stock[id]>0&&canOrder(id)){any=true;break;}}
+  if(!any)night.note='Pantry empty! Buy rice & supplies in the Shop \u2014 guests can\u2019t order.';}
  night.owner=null;
  if(G.day>=10&&(!G.vend||!G.vend.owned)&&G.vendPass!==G.day)night.owner={kind:'sell'};
  else if(G.vend&&G.vend.owned&&G.vend.snacks<6&&G.day>G.vend.day0&&(G.day-G.vend.day0)%5===0&&G.vend.lastOfferDay!==G.day)night.owner={kind:'snack'};
@@ -1936,7 +1939,12 @@ function updNight(dt){
    if(c.x<=c.tx){c.state='sit';c.t=0;}}
   else if(c.state==='sit'){if(c.t>0.7){const w=chooseOrder();
    if(w){placeOrder(c,w);c.state='wait';c.t=0;}
-   else{c.state='noFood';c.t=0;}}}
+   else{c.state='noFood';c.t=0;
+    let miss=null;
+    for(const id in night.stock){if((night.stock[id]||0)<=0)continue;
+     for(const k of (REC[id]||[])){if(((G.ing[k]||0)-(night.resIng[k]||0))<=0){miss=k;break;}}
+     if(miss)break;}
+    stageFloat(c.tx,368,miss?('Out of '+miss+'!'):'Nothing to serve\u2026','#ff9d9d');}}}
   else if(c.state==='wait'){c.patience-=dt;
    if(c.patience<=0){cancelOrder(c);
     c.state='leave';c.angry=true;night.left++;
@@ -2366,7 +2374,10 @@ const PAD={on:false,lx:0,ly:0,rx:0,ry:0,held:false,prev:[]};
 let showControls=false;
 function dz(v){return Math.abs(v)<0.18?0:v;}
 function updatePad(dt){
- const gps=navigator.getGamepads?navigator.getGamepads():[];
+ if(PAD.blocked)return;
+ let gps=[];
+ try{gps=navigator.getGamepads?navigator.getGamepads():[];}
+ catch(e){PAD.blocked=true;return;}
  let gp=null;for(const g of gps)if(g&&g.connected){gp=g;break;}
  if(!gp){if(PAD.held){mouse.down=false;PAD.held=false;}
   PAD.lx=PAD.ly=PAD.rx=PAD.ry=0;PAD.prev=[];return;}
