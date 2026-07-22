@@ -164,6 +164,7 @@ addSkin('sunset','Sunset Fade',240,{grad:['#ff8c42','#ff5f7e','#8e5bff'],fin:'#f
 addSkin('oceanic','Oceanic',200,{grad:['#28e0c1','#2477ff'],fin:'#bff1ff'});
 addSkin('goldhour','Golden Hour',300,{grad:['#ffe27a','#ff9d2e'],fin:'#8a5e0d'});
 addSkin('candy','Candy Pop',240,{grad:['#ff6fae','#7fd0ff'],fin:'#fff6e8'});
+addSkin('rainbow','Rainbow',500,{grad:['#ff5f5f','#ffb03f','#ffe95c','#7cf2a8','#5cb4f2','#b48af2'],fin:'#fff6e8'});
 function curSkin(){return SKINS[G.skin]||SKINS.default;}
 
 /* ---------- game state ---------- */
@@ -235,7 +236,7 @@ const UPG=[
  {id:'bag', name:'Cooler bag', desc:'Carry more fish',   vals:[8,12,16,20],      cost:[50,120,210]},
  {id:'spear',name:'Harpoon tip',desc:'Hit harder',       vals:[1,2,3],           cost:[80,170]},
  {id:'speed',name:'Swim fins', desc:'Move faster',       vals:[300,360,420,490], cost:[70,150,260]},
- {id:'reach',name:'Spear reach',desc:'Longer shots',     vals:[130,190,260,340], cost:[60,140,240]}
+ {id:'reach',name:'Harpoon reach',desc:'Longer shots',     vals:[130,190,260,340], cost:[60,140,240]}
 ];
 const UPGI={};UPG.forEach(u=>UPGI[u.id]=u);
 const ING={
@@ -1058,7 +1059,7 @@ function drawDiverBody(x,y,aim,face,kick,blink,skin){
  ctx.fillStyle=bg;ctx.beginPath();ctx.ellipse(0,0,16,19,0,0,TAU);ctx.fill();
  ctx.strokeStyle='rgba(180,230,255,0.32)';ctx.lineWidth=2;
  ctx.beginPath();ctx.ellipse(0,0,16,19,0,Math.PI*1.1,Math.PI*1.75);ctx.stroke();
- if(G.wig==='crop'){ctx.fillStyle=DYEC();ctx.beginPath();ctx.arc(2,-24,10,0,TAU);ctx.fill();}
+ if(G.wig==='crop'){ctx.fillStyle=hairFill();ctx.beginPath();ctx.arc(2,-24,10,0,TAU);ctx.fill();}
  ctx.fillStyle='#f2b98c';ctx.beginPath();ctx.arc(6,-22,9.4,0,TAU);ctx.fill();
  if(G.wig!=='crop')drawHair();
  ctx.fillStyle='#0d2b45';rr(4,-28,15,10,4);ctx.fill();
@@ -1114,7 +1115,7 @@ function drawHarpoon(h){
    ctx.beginPath();ctx.moveTo(4,-6);ctx.lineTo(8,-1);ctx.lineTo(4,2);ctx.lineTo(9,6);ctx.stroke();}
   if(wp==='poison'){ctx.fillStyle='rgba(150,230,120,0.9)';
    ctx.beginPath();ctx.arc(2,4,3,0,TAU);ctx.fill();}
-  ctx.fillStyle=wp==='electric'?'#bff4ff':wp==='poison'?'#9fe87c':TIPC();
+  ctx.fillStyle=wp==='electric'?'#bff4ff':wp==='poison'?'#9fe87c':TIPC(0,-5.4,12,5.4);
   ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(0,-5.4);ctx.lineTo(0,5.4);ctx.closePath();ctx.fill();
   ctx.shadowBlur=0;}
  ctx.restore();}
@@ -1880,15 +1881,18 @@ const TIPS=[
  {id:'magenta',name:'Magenta',c:'#f26bd0',price:40},
  {id:'lime',name:'Lime',c:'#a8e83f',price:40},
  {id:'violet',name:'Violet',c:'#8e5bff',price:40},
- {id:'black',name:'Onyx',c:'#2b2f3a',price:50}];
+ {id:'black',name:'Onyx',c:'#2b2f3a',price:50},
+ {id:'rainbow',name:'Rainbow',g:['#ff5f5f','#ffb03f','#ffe95c','#7cf2a8','#5cb4f2','#b48af2'],c:'#ff5f5f',price:120}];
 const GOGS=[
  {id:'sky',name:'Sky',c:'rgba(150,230,255,0.85)',price:0},
  {id:'amber',name:'Amber',c:'rgba(255,200,120,0.85)',price:25},
  {id:'rose',name:'Rose',c:'rgba(255,150,200,0.85)',price:25},
+ {id:'red',name:'Red',c:'rgba(255,90,90,0.85)',price:30},
  {id:'lime',name:'Lime',c:'rgba(180,255,150,0.85)',price:30},
  {id:'violet',name:'Violet',c:'rgba(200,160,255,0.85)',price:30},
  {id:'mirror',name:'Mirror',c:'rgba(240,250,255,0.95)',price:40},
- {id:'noir',name:'Noir',c:'rgba(90,110,130,0.9)',price:40}];
+ {id:'noir',name:'Noir',c:'rgba(90,110,130,0.9)',price:40},
+ {id:'rainbow',name:'Rainbow',g:['#ff5f5f','#ffb03f','#ffe95c','#7cf2a8','#5cb4f2','#b48af2'],c:'rgba(255,150,150,0.9)',price:120}];
 const DYES=[
  {id:'brown',name:'Brown',c:'#3a2b23',price:0},
  {id:'black',name:'Black',c:'#1c1c22',price:20},
@@ -1899,12 +1903,14 @@ const DYES=[
  {id:'green',name:'Green',c:'#4caf6d',price:30},
  {id:'white',name:'White',c:'#e8ecf2',price:30},
  {id:'purple',name:'Purple',c:'#8e5bff',price:30},
+ {id:'orange',name:'Orange',c:'#ff8c2e',price:25},
  {id:'sunset',name:'Sunset',g:['#ffd23f','#ff8c42','#f26bd0'],c:'#ff8c42',price:60},
  {id:'fire',name:'Fire',g:['#ffd23f','#ff4b2e'],c:'#ff6b35',price:60},
  {id:'mermaid',name:'Mermaid',g:['#3fd67c','#3d7dff'],c:'#2fb8a8',price:70},
  {id:'candy',name:'Candy',g:['#ff9ad5','#7fd0ff'],c:'#ffb0e0',price:70},
  {id:'galaxy',name:'Galaxy',g:['#8e5bff','#f26bd0','#7fd0ff'],c:'#a06bff',price:80},
- {id:'aurora',name:'Aurora',g:['#3fd67c','#7fd0ff','#8e5bff'],c:'#5cc9ee',price:80}];
+ {id:'aurora',name:'Aurora',g:['#3fd67c','#7fd0ff','#8e5bff'],c:'#5cc9ee',price:80},
+ {id:'rainbow',name:'Rainbow',g:['#ff5f5f','#ffb03f','#ffe95c','#7cf2a8','#5cb4f2','#b48af2'],c:'#ff5f5f',price:120}];
 const WIGS=[
  {id:'crop',name:'Crop',price:0},
  {id:'buzz',name:'Buzzed',price:20},
@@ -1914,8 +1920,15 @@ const WIGS=[
  {id:'bun',name:'Top bun',price:40},
  {id:'afro',name:'Afro',price:50},
  {id:'mohawk',name:'Mohawk',price:50}];
-const TIPC=()=>{const it=TIPS.find(o=>o.id===G.tip);return it?it.c:'#dfe9f2';};
-const GOGC=()=>{const it=GOGS.find(o=>o.id===G.gog);return it?it.c:'rgba(150,230,255,0.85)';};
+function gradFill(it,def,x0,y0,x1,y1){
+ if(!it)return def;
+ if(!it.g)return it.c;
+ const g=ctx.createLinearGradient(x0,y0,x1,y1);
+ it.g.forEach((c,i)=>g.addColorStop(it.g.length>1?i/(it.g.length-1):0,c));
+ return g;}
+const dyeIt=()=>DYES.find(o=>o.id===G.dye);
+const TIPC=(x0=47,y0=-4,x1=57,y1=4)=>gradFill(TIPS.find(o=>o.id===G.tip),'#dfe9f2',x0,y0,x1,y1);
+const GOGC=()=>gradFill(GOGS.find(o=>o.id===G.gog),'rgba(150,230,255,0.85)',6,-26,17,-19.6);
 const DYEC=()=>{const it=DYES.find(o=>o.id===G.dye);return it?it.c:'#3a2b23';};
 function hairFill(){const it=DYES.find(o=>o.id===G.dye);
  if(!it)return '#3a2b23';
@@ -2022,9 +2035,9 @@ function pickCard(x,y,w,h,name,price,owned,eq,icon){
  return null;}
 function tipIcon(it,cx,cy){ctx.strokeStyle='#b8c4d4';ctx.lineWidth=3;
  ctx.beginPath();ctx.moveTo(cx-16,cy+6);ctx.lineTo(cx+6,cy-2);ctx.stroke();
- ctx.fillStyle=it.c;ctx.beginPath();ctx.moveTo(cx+16,cy-6);ctx.lineTo(cx+2,cy-8);ctx.lineTo(cx+7,cy+3);ctx.closePath();ctx.fill();}
+ ctx.fillStyle=gradFill(it,it.c,cx+2,cy-8,cx+16,cy+3);ctx.beginPath();ctx.moveTo(cx+16,cy-6);ctx.lineTo(cx+2,cy-8);ctx.lineTo(cx+7,cy+3);ctx.closePath();ctx.fill();}
 function gogIcon(it,cx,cy){ctx.fillStyle='#14202e';rr(cx-15,cy-8,30,15,7);ctx.fill();
- ctx.fillStyle=it.c;rr(cx-12,cy-5.5,24,10,5);ctx.fill();
+ ctx.fillStyle=gradFill(it,it.c,cx-12,cy-5.5,cx+12,cy+4.5);rr(cx-12,cy-5.5,24,10,5);ctx.fill();
  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.beginPath();ctx.arc(cx-6,cy-2,2,0,TAU);ctx.fill();}
 function dyeIcon(it,cx,cy){
  if(it.g){const g=ctx.createLinearGradient(cx,cy-11,cx,cy+13);
@@ -2037,12 +2050,12 @@ function dyeIcon(it,cx,cy){
  ctx.quadraticCurveTo(cx-9,cy+1,cx,cy-11);ctx.closePath();ctx.fill();
  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.beginPath();ctx.arc(cx-2.5,cy+3,2.2,0,TAU);ctx.fill();}
 function wigIcon(it,cx,cy){
- if(it.id==='crop'){ctx.fillStyle=DYEC();
+ if(it.id==='crop'){ctx.fillStyle=gradFill(dyeIt(),'#3a2b23',cx-3.5,cy-9,cx-3.5,cy+9);
   ctx.beginPath();ctx.arc(cx-3.5,cy,8.6,0,TAU);ctx.fill();
   ctx.fillStyle='#f2b98c';ctx.beginPath();ctx.arc(cx,cy+2,8,0,TAU);ctx.fill();return;}
  ctx.fillStyle='#f2b98c';
  ctx.beginPath();ctx.arc(cx,cy+2,8,0,TAU);ctx.fill();
- ctx.fillStyle=DYEC();wigShape(it.id,cx,cy+2,8);}
+ ctx.fillStyle=gradFill(dyeIt(),'#3a2b23',cx,cy-8,cx,cy+10);wigShape(it.id,cx,cy+2,8);}
 function styleRow(cx0,cw2,vis,label,items,ownKey,curKey,icon,y){
  ctx.textAlign='left';ctx.textBaseline='middle';
  ctx.font=`800 13px ${FN}`;ctx.fillStyle='rgba(255,246,232,0.75)';
