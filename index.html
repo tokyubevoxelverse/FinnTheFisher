@@ -556,6 +556,7 @@ function screenToWorld(x,y){return {x:x+cam.sx,y:y+cam.sy};}
 function updDiver(dt,t){
  const mw=screenToWorld(mouse.x,mouse.y);
  diver.aim=Math.atan2(mw.y-diver.y,mw.x-diver.x);
+ if(PAD.on&&(Math.abs(PAD.rx)>0.25||Math.abs(PAD.ry)>0.25))diver.aim=Math.atan2(PAD.ry,PAD.rx);
  diver.face=Math.cos(diver.aim)>=0?1:-1;
  let ix=0,iy=0;
  if(keys['a']||keys['arrowleft'])ix-=1;
@@ -563,6 +564,8 @@ function updDiver(dt,t){
  if(keys['w']||keys['arrowup'])iy-=1;
  if(keys['s']||keys['arrowdown'])iy+=1;
  if(diver.stun>0){diver.stun-=dt;ix=0;iy=0;}
+ ix+=PAD.lx;iy+=PAD.ly;
+ ix=clamp(ix,-1,1);iy=clamp(iy,-1,1);
  const l=Math.hypot(ix,iy)||1;
  const acc=swimSpd()*2.1;
  diver.vx+=ix/l*acc*dt;diver.vy+=iy/l*acc*dt;
@@ -1055,8 +1058,9 @@ function drawDiverBody(x,y,aim,face,kick,blink,skin){
  ctx.fillStyle=bg;ctx.beginPath();ctx.ellipse(0,0,16,19,0,0,TAU);ctx.fill();
  ctx.strokeStyle='rgba(180,230,255,0.32)';ctx.lineWidth=2;
  ctx.beginPath();ctx.ellipse(0,0,16,19,0,Math.PI*1.1,Math.PI*1.75);ctx.stroke();
+ if(G.wig==='crop'){ctx.fillStyle=DYEC();ctx.beginPath();ctx.arc(2,-24,10,0,TAU);ctx.fill();}
  ctx.fillStyle='#f2b98c';ctx.beginPath();ctx.arc(6,-22,9.4,0,TAU);ctx.fill();
- drawHair();
+ if(G.wig!=='crop')drawHair();
  ctx.fillStyle='#0d2b45';rr(4,-28,15,10,4);ctx.fill();
  ctx.fillStyle=GOGC();rr(6,-26,11,6.4,3);ctx.fill();
  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.fillRect(7.4,-25,3,2.4);
@@ -1786,6 +1790,77 @@ function drawNight(t){
  homeButton();
  muteButton();}
 
+/* ================= GAMEPAD + CONTROLS ================= */
+const PAD={on:false,lx:0,ly:0,rx:0,ry:0,held:false,prev:[]};
+let showControls=false;
+function dz(v){return Math.abs(v)<0.18?0:v;}
+function updatePad(dt){
+ const gps=navigator.getGamepads?navigator.getGamepads():[];
+ let gp=null;for(const g of gps)if(g&&g.connected){gp=g;break;}
+ if(!gp){if(PAD.held){mouse.down=false;PAD.held=false;}
+  PAD.lx=PAD.ly=PAD.rx=PAD.ry=0;PAD.prev=[];return;}
+ const b=gp.buttons.map(x=>x.pressed);
+ const jp=i=>b[i]&&!PAD.prev[i];
+ PAD.lx=dz(gp.axes[0]||0);PAD.ly=dz(gp.axes[1]||0);
+ PAD.rx=dz(gp.axes[2]||0);PAD.ry=dz(gp.axes[3]||0);
+ if(b[14])PAD.lx-=1;if(b[15])PAD.lx+=1;
+ if(b[12])PAD.ly-=1;if(b[13])PAD.ly+=1;
+ PAD.lx=clamp(PAD.lx,-1,1);PAD.ly=clamp(PAD.ly,-1,1);
+ if(b.some(x=>x)||Math.abs(PAD.lx)+Math.abs(PAD.ly)+Math.abs(PAD.rx)+Math.abs(PAD.ry)>0)PAD.on=true;
+ if(!PAD.on){PAD.prev=b;return;}
+ if(G.state!=='dive'){
+  const mx2=PAD.lx+PAD.rx,my2=PAD.ly+PAD.ry;
+  if(mx2||my2){mouse.x=clamp(mouse.x+mx2*760*dt,0,W);
+   mouse.y=clamp(mouse.y+my2*760*dt,0,H);}}
+ if(jp(0)){
+  if(G.state==='dive')keys['e']=true;
+  else{mouse.clicked=true;mouse.down=true;PAD.held=true;}}
+ if(!b[0]&&PAD.held){mouse.down=false;PAD.held=false;}
+ if(jp(2))keys['q']=true;
+ if(jp(3))keys['f']=true;
+ if(jp(1)||jp(9))keys['escape']=true;
+ if(G.state==='dive'&&!G.lock&&(jp(7)||jp(5)))fireHarpoon();
+ PAD.prev=b;}
+function drawPadCursor(){
+ if(!PAD.on||G.state==='dive')return;
+ ctx.strokeStyle='rgba(255,246,232,0.95)';ctx.lineWidth=2.4;
+ ctx.beginPath();ctx.arc(mouse.x,mouse.y,10,0,TAU);ctx.stroke();
+ ctx.fillStyle='rgba(255,210,63,0.95)';
+ ctx.beginPath();ctx.arc(mouse.x,mouse.y,2.6,0,TAU);ctx.fill();}
+const CTRLS=[
+ ['Move','WASD / Arrows','Left stick / D-pad','Left stick / D-pad'],
+ ['Aim','Mouse','Right stick','Right stick'],
+ ['Fire weapon','Left click','R2 / R1','RT / RB'],
+ ['Interact (boat / pod)','E','Cross','A'],
+ ['Use O\u2082 tank','Q','Square','X'],
+ ['Switch weapon','F','Triangle','Y'],
+ ['Click / serve','Left click','Cross','A'],
+ ['Pour (hold)','Hold click','Hold Cross','Hold A'],
+ ['Back / menu','Esc','Circle / Options','B / Start']];
+function drawControls(){
+ ctx.fillStyle='rgba(5,8,20,0.72)';ctx.fillRect(0,0,W,H);
+ const pw=Math.min(880,W-32),ph=Math.min(510,H-24);
+ const px=W/2-pw/2,py=H/2-ph/2;
+ panel(px,py,pw,ph,0.97);
+ ctx.textAlign='left';ctx.textBaseline='middle';
+ ctx.font=`800 26px ${FB}`;ctx.fillStyle='#fff6e8';
+ ctx.fillText('CONTROLS',px+28,py+36);
+ ctx.font=`700 12px ${FN}`;
+ ctx.fillStyle=PAD.on?'#7cf2a8':'rgba(255,246,232,0.55)';
+ ctx.fillText(PAD.on?'\u25cf Controller connected':'Pair a PS5 or Xbox pad over Bluetooth \u2014 it just works',px+28,py+58);
+ if(button(px+pw-52,py+16,36,36,'\u2715',{size:15})){showControls=false;AUDIO.ui();}
+ const cols=[px+28,px+pw*0.37,px+pw*0.60,px+pw*0.81];
+ ctx.font=`800 13px ${FN}`;ctx.fillStyle='#ffd23f';
+ ctx.fillText('Keyboard + Mouse',cols[1],py+88);
+ ctx.fillText('PS5',cols[2],py+88);
+ ctx.fillText('Xbox',cols[3],py+88);
+ ctx.font=`700 12.5px ${FN}`;
+ CTRLS.forEach((r,ri)=>{const yy=py+114+ri*38;
+  ctx.fillStyle='rgba(255,246,232,0.92)';ctx.fillText(r[0],cols[0],yy);
+  ctx.fillStyle='rgba(255,246,232,0.66)';
+  for(let ci=1;ci<4;ci++)ctx.fillText(r[ci],cols[ci],yy);
+  if(ri<CTRLS.length-1){ctx.strokeStyle='rgba(255,246,232,0.07)';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(px+24,yy+19);ctx.lineTo(px+pw-24,yy+19);ctx.stroke();}});}
 /* ================= SUMMARY ================= */
 
 /* ================= ARSENAL & STYLE ================= */
@@ -1945,7 +2020,11 @@ function dyeIcon(it,cx,cy){ctx.fillStyle=it.c;
  ctx.arc(cx,cy+6,7,0,Math.PI);
  ctx.quadraticCurveTo(cx-9,cy+1,cx,cy-11);ctx.closePath();ctx.fill();
  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.beginPath();ctx.arc(cx-2.5,cy+3,2.2,0,TAU);ctx.fill();}
-function wigIcon(it,cx,cy){ctx.fillStyle='#f2b98c';
+function wigIcon(it,cx,cy){
+ if(it.id==='crop'){ctx.fillStyle=DYEC();
+  ctx.beginPath();ctx.arc(cx-3.5,cy,8.6,0,TAU);ctx.fill();
+  ctx.fillStyle='#f2b98c';ctx.beginPath();ctx.arc(cx,cy+2,8,0,TAU);ctx.fill();return;}
+ ctx.fillStyle='#f2b98c';
  ctx.beginPath();ctx.arc(cx,cy+2,8,0,TAU);ctx.fill();
  ctx.fillStyle=DYEC();wigShape(it.id,cx,cy+2,8);}
 function styleRow(cx0,cw2,vis,label,items,ownKey,curKey,icon,y){
@@ -2289,8 +2368,10 @@ function drawSlots(t){
    if(occ>=0){loadSlot(occ);cb();}
    else setMsg('Start a game first \u2014 you need a wallet',2.6);}
   else cb();};
- if(button(W/2-178,y0+chh+22,168,46,'\u26df  Shop',{size:19}))ensureSlot(()=>openShop('title'));
- if(button(W/2+10,y0+chh+22,168,46,'\u2388  Oceans',{size:19}))ensureSlot(()=>{G.state='oceans';});}
+ if(button(W/2-235,y0+chh+22,150,46,'\u26df Shop',{size:17}))ensureSlot(()=>openShop('title'));
+ if(button(W/2-75,y0+chh+22,150,46,'\u2388 Oceans',{size:17}))ensureSlot(()=>{G.state='oceans';});
+ if(button(W/2+85,y0+chh+22,150,46,'\u2328 Controls',{size:17})){showControls=true;AUDIO.ui();}
+ if(showControls)drawControls();}
 function drawTitle(t){
  drawEnv(t,false);
  ctx.save();ctx.translate(-cam.sx,-cam.sy);
@@ -2577,7 +2658,8 @@ function drawDrown(){
 let last=performance.now()/1000;
 function frame(nowMs){
  const now=nowMs/1000;
- let dt=Math.min(0.05,now-last);last=now;
+ let dt=Math.min(0.05,now-last);
+ updatePad(dt);last=now;
  DT=dt;
  const t=now;
  ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -2585,7 +2667,8 @@ function frame(nowMs){
  hoverUI=false;
  if(G.msgT>0)G.msgT-=dt;
  if(keys['escape']){keys['escape']=false;
-  if(G.state==='shop'){G.state=shopReturn;if(G.state==='title')initTitle();}
+  if(showControls){showControls=false;AUDIO.ui();}
+  else if(G.state==='shop'){G.state=shopReturn;if(G.state==='title')initTitle();}
   else if(G.state==='splash'){if(!G.splashDone){G.splashDone=true;fadeTo(initTitle,'dark');}}
   else if(G.state==='oceans'||G.state==='boat'){saveActive();initTitle();}
   else if(G.state!=='title'&&G.state!=='drown'&&!G.lock){
@@ -2615,6 +2698,7 @@ function frame(nowMs){
  updFade(dt);drawFade();
  cv.style.cursor=G.state==='dive'&&!hoverUI?'crosshair':(hoverUI?'pointer':'default');
  mouse.clicked=false;
+ drawPadCursor();
  requestAnimationFrame(frame);}
 if(document.fonts&&document.fonts.load){
  document.fonts.load('800 40px "Baloo 2"');
