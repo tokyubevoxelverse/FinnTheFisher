@@ -230,6 +230,16 @@ function rayRGB(){const oc=OC();
  return _rayCache.rgb;}
 function hexA(h,a){const n=parseInt(h.slice(1),16);
  return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function mixHex(h1,h2,t2){const n1=parseInt(h1.slice(1),16),n2=parseInt(h2.slice(1),16);
+ const r=Math.round((n1>>16&255)+(((n2>>16&255)-(n1>>16&255))*t2));
+ const g2=Math.round((n1>>8&255)+(((n2>>8&255)-(n1>>8&255))*t2));
+ const b=Math.round((n1&255)+(((n2&255)-(n1&255))*t2));
+ return `rgb(${r},${g2},${b})`;}
+function waterCol(f){const st=OC().water;
+ for(let i2=1;i2<st.length;i2++){if(f<=st[i2][0]){
+  const a=st[i2-1],b=st[i2],t2=(f-a[0])/Math.max(0.0001,b[0]-a[0]);
+  return mixHex(a[1],b[1],t2);}}
+ return st[st.length-1][1];}
 const JPAL=['255,140,205','120,235,255','150,255,180','200,160,255','255,220,120'];
 const UPG=[
  {id:'o2',  name:'Air tank',   desc:'Stay under longer', vals:[100,145,190,240], cost:[60,130,220]},
@@ -344,7 +354,7 @@ const FIDX=Object.fromEntries(FISH.map((f,i)=>[f.id,i]));
 
 /* ---------- world generation ---------- */
 let seabed=[],rocksFar=null,rocksMid=null,kelp=[],clusters=[],vents=[];
-let islands=[],cloudsFar=[],cloudsNear=[],sandDots=[],pebbles=[],boulders=[],stars=[],shells=[],obstacles=[],pods=[];
+let islands=[],cloudsFar=[],cloudsNear=[],sandDots=[],pebbles=[],boulders=[],stars=[],shells=[],obstacles=[],pods=[],walls=[],wallFlora=[],collCS=[],tankPickups=[];
 let CAU=null;
 const CORAL_PAL=['#ff6b6b','#ff9f5c','#f26bd0','#ffd23f','#7ce8c8','#c77dff','#ff7ab8','#66d9e8','#ffa94d','#e599f7'];
 function terrainY(x){const seg=WORLD.w/(seabed.length-1);const i=clamp(Math.floor(x/seg),0,seabed.length-2);
@@ -368,6 +378,7 @@ function genWorld(){
  for(let i=0;i<=n;i++){const x=i/n*WORLD.w;y=clamp(y+rand(-150,150),WORLD.h-780,WORLD.h-170);seabed.push({x,y});}
  for(let k=0;k<2;k++)for(let i=1;i<seabed.length-1;i++)
   seabed[i].y=(seabed[i-1].y+seabed[i].y*2+seabed[i+1].y)/4;
+ WORLD.deepest=seabed.reduce((m,p2)=>Math.max(m,p2.y),WORLD.surface+800);
  rocksFar=layerRocks(0.4,OC().rockFar);rocksMid=layerRocks(0.68,OC().rockMid);
  SUN.wx=WORLD.w*0.58;SUN.wy=WORLD.surface-235;
  islands=[{x:640,w:340,h:56},{x:2400,w:520,h:88},{x:3900,w:300,h:50}];
@@ -385,25 +396,76 @@ function genWorld(){
    kelp.push({x:kx,y:terrainY(kx)+4,h:rand(180,390),ph:rand(TAU),sway:rand(14,30),w:rand(10,16)});}
   if(OC().kelpMul>2&&Math.random()<0.7){const kx=px+rand(-90,90);
    kelp.push({x:kx,y:terrainY(kx)+4,h:rand(240,520),ph:rand(TAU),sway:rand(18,36),w:rand(12,19)});}
-  if(Math.random()<0.75){const cx=px+rand(-70,70);const items=[];
-   const m=irand(3,5);
-   for(let k=0;k<m;k++)items.push({dx:rand(-78,78),type:irand(0,5),r:rand(24,54),hue:pick(CORAL_PAL),ph:rand(TAU)});
-   clusters.push({x:cx,items});}
+  if(Math.random()<0.75){const cx=px+rand(-70,70);
+   if(!clusters.length||Math.abs(cx-clusters[clusters.length-1].x)>=130){
+    clusters.push({x:cx,items:plantRow(150,irand(2,4))});}}
   if(Math.random()<0.22)vents.push({x:px+rand(-40,40),t:rand(1,7)});}
+ walls=[];wallFlora=[];tankPickups=[];
+ let wtry=0;
+ while(walls.length<5&&wtry++<420){
+  const wx=rand(1050,WORLD.w-340);
+  if(Math.abs(wx-520)<560)continue;
+  if(walls.some(w2=>Math.abs(w2.x-wx)<520))continue;
+  const base=terrainY(wx)+26;
+  const top=WORLD.surface+rand(260,430);
+  const segH=118,ww=rand(130,172);
+  const n=Math.max(5,Math.round((base-top)/segH));
+  const gaps=new Set();
+  const g1=irand(1,Math.max(1,n-3));gaps.add(g1);gaps.add(g1+1);
+  if(n>=9&&Math.random()<0.8){const g2=irand(1,n-3);
+   if(![...gaps].some(g=>Math.abs(g-g2)<3)){gaps.add(g2);gaps.add(g2+1);}}
+  const segs=[],cs=[];
+  for(let i2=0;i2<n;i2++){
+   if(gaps.has(i2))continue;
+   const yTop=base-(i2+1)*segH;
+   const exposed=(i2===n-1)||gaps.has(i2+1);
+   segs.push({y:yTop,exposed});
+   cs.push({x:wx+rand(-4,4),y:yTop+segH/2,r:ww*0.52});
+   if(exposed)wallFlora.push({x:wx,y:yTop-2,items:plantRow(ww*0.8,irand(2,3))});}
+  const ledges=[];
+  for(const sg of segs){
+   if(Math.random()<0.42&&!sg.exposed){
+    const side=Math.random()<0.5?-1:1;
+    const lw=rand(120,210);
+    const lx=wx+side*(ww/2+lw/2-14);
+    const ly=sg.y+rand(24,segH-44);
+    ledges.push({x:lx,y:ly,w:lw});
+    cs.push({x:lx,y:ly+12,r:Math.min(30,lw*0.24)});
+    cs.push({x:lx+side*lw*0.24,y:ly+12,r:Math.min(26,lw*0.2)});
+    wallFlora.push({x:lx,y:ly-2,items:plantRow(lw*0.8,irand(2,3))});}}
+  const spots=[];
+  for(const sg of segs)if(sg.exposed)spots.push({x:wx+pick([-1,1])*ww*0.34,y:sg.y-18});
+  for(const L of ledges){const sd=Math.sign(L.x-wx)||1;
+   spots.push({x:L.x+sd*(L.w/2-20),y:L.y-18});}
+  const nT=Math.min(2,spots.length);
+  for(let k=0;k<nT;k++){
+   const sp=spots.splice(irand(0,spots.length-1),1)[0];
+   tankPickups.push({x:sp.x,y:sp.y,taken:false});}
+  walls.push({x:wx,w:ww,segH,segs,ledges,cs});}
+ pods=[];
+ if(walls.length){
+  const ws=[...walls].sort((a,b)=>a.x-b.x);
+  const chosen=ws.length<=3?ws:[ws[0],ws[Math.floor(ws.length/2)],ws[ws.length-1]];
+  for(const w2 of chosen){const sd=Math.random()<0.5?-1:1;
+   const px2=w2.x+sd*(w2.w/2+96);
+   pods.push({x:px2,y:terrainY(px2)-34});}}
+ else{const px2=WORLD.w*0.6;pods.push({x:px2,y:terrainY(px2)-34});}
  obstacles=[];
  let otry=0;
- while(obstacles.length<9&&otry++<220){
+ while(obstacles.length<7&&otry++<240){
   const ox2=rand(780,WORLD.w-260);
   if(Math.abs(ox2-520)<400)continue;
   if(obstacles.some(o=>Math.abs(o.x-ox2)<250))continue;
+  if(walls.some(w2=>Math.abs(w2.x-ox2)<280))continue;
+  if(pods.some(p2=>Math.abs(p2.x-ox2)<180))continue;
   const base=terrainY(ox2),oh=rand(170,430),ow=rand(74,128);
   obstacles.push({x:ox2,cs:[
    {x:ox2,y:base-oh*0.18,r:ow*0.62},
    {x:ox2+rand(-16,16),y:base-oh*0.55,r:ow*0.48},
    {x:ox2+rand(-20,20),y:base-oh*0.88,r:ow*0.34}]});}
- pods=[];
- for(const fx of[0.42,0.78]){const px2=WORLD.w*fx+rand(-160,160);
-  pods.push({x:px2,y:terrainY(px2)-34});}
+ collCS=[];
+ for(const o of obstacles)collCS.push(...o.cs);
+ for(const w2 of walls)collCS.push(...w2.cs);
  if(!CAU)makeCaustics();}
 
 /* ---------- dive entities ---------- */
@@ -438,6 +500,7 @@ function startDive(){
  for(let i=0;i<nSh;i++){
   const sx2=rand(WORLD.w*0.45,WORLD.w-360);
   fishes.push(newFish(shT,sx2,lerp(bandTop(shT),bandBot(shT),Math.random())));}
+ for(const tp of tankPickups)tp.taken=false;
  G.state='dive';
  setMsg(G.day===1?'Dive!  Harpoon fish, then surface at the boat':'Day '+G.day+' — dive!',3.2);}
 function addFloat(x,y,txt,c){floats.push({x,y,txt,c,t:1.5});}
@@ -458,8 +521,8 @@ function fireHarpoon(){
 function updHarpoon(h,dt){
  if(!h.ret){h.x+=h.vx*dt;h.y+=h.vy*dt;h.life-=dt;
   if(dist(h.ox,h.oy,h.x,h.y)>h.reach)h.ret=true;
-  for(const ob of obstacles){for(const c of ob.cs){
-   if(dist(h.x,h.y,c.x,c.y)<c.r){h.ret=true;break;}}if(h.ret)break;}
+  for(const c of collCS){
+   if(dist(h.x,h.y,c.x,c.y)<c.r){h.ret=true;break;}}
   for(const f of fishes){if(f.caught||f.dead)continue;
    if((f.hitI||0)>0)continue;
    if(dist(h.x,h.y,f.x,f.y)<f.t.s*f.sm+9){
@@ -580,12 +643,13 @@ function updDiver(dt,t){
  if(diver.y>ty){diver.y=ty;diver.vy=Math.min(0,diver.vy);}
  const sy=WORLD.surface+waveOff(diver.x,t)+18;
  if(diver.y<sy){diver.y=sy;diver.vy=Math.max(0,diver.vy);}
- for(const ob of obstacles)for(const c of ob.cs){
+ for(const c of collCS){
   const dx2=diver.x-c.x,dy2=diver.y-c.y,d2=Math.hypot(dx2,dy2),R=c.r+14;
   if(d2<R&&d2>0){const nx=dx2/d2,ny=dy2/d2;
    diver.x=c.x+nx*R;diver.y=c.y+ny*R;
    const vd=diver.vx*nx+diver.vy*ny;
    if(vd<0){diver.vx-=vd*nx;diver.vy-=vd*ny;}}}
+
  diver.kick+=dt*(4+Math.hypot(diver.vx,diver.vy)*0.05);
  const atSurf=diver.y<WORLD.surface+64;
  if(atSurf)diver.o2=Math.min(maxO2(),diver.o2+32*dt);
@@ -618,6 +682,10 @@ function updDiver(dt,t){
   if(G.weps.length>1){const wi=G.weps.indexOf(G.wep);
    G.wep=G.weps[(wi+1)%G.weps.length];
    setMsg(wepOf().name,1.1);AUDIO.ui();}}
+ for(const tp of tankPickups){if(tp.taken)continue;
+  if(dist(diver.x,diver.y,tp.x,tp.y)<46){tp.taken=true;G.tanks++;
+   AUDIO.bubble();AUDIO.coin();
+   addFloat(tp.x,tp.y-30,'Spare O\u2082 +1  (Q)','#9be8ff');saveActive();}}
  G.prompt=null;
  if(Math.abs(diver.x-520)<120&&diver.y<WORLD.surface+100)G.prompt='boat';
  else for(const p2 of pods){if(dist(diver.x,diver.y,p2.x,p2.y)<74){G.prompt='pod';break;}}
@@ -707,8 +775,16 @@ function drawWater(t,showBoat){
  ctx.beginPath();ctx.moveTo(x0,WORLD.surface+140);
  for(let x=x0;x<=x1;x+=22)ctx.lineTo(x,WORLD.surface-11+waveOff(x*1.13+520,t*0.9)*0.8);
  ctx.lineTo(x1,WORLD.surface+140);ctx.closePath();ctx.fill();
- const wg=ctx.createLinearGradient(0,WORLD.surface,0,WORLD.h);
- for(const st2 of OC().water)wg.addColorStop(st2[0],st2[1]);
+ const wT=Math.max(WORLD.surface,cam.sy-40),wB=cam.sy+H+40;
+ const spanW=Math.max(1,(WORLD.deepest||WORLD.h)-WORLD.surface);
+ const f0=clamp((wT-WORLD.surface)/spanW,0,1),f1=clamp((wB-WORLD.surface)/spanW,0,1);
+ const cmid=(f0+f1)/2,half=0.30;
+ let u0=cmid-half,u1=cmid+half;
+ if(u0<0){u1-=u0;u0=0;}
+ if(u1>1){u0=Math.max(0,u0-(u1-1));u1=1;}
+ const wg=ctx.createLinearGradient(0,wT,0,wB);
+ for(let i2=0;i2<=6;i2++){const t2=i2/6;
+  wg.addColorStop(t2,waterCol(u0+(u1-u0)*t2));}
  ctx.beginPath();ctx.moveTo(x0,cam.sy+H+120);ctx.lineTo(x0,WORLD.surface+waveOff(x0,t));
  for(let x=x0;x<=x1;x+=16)ctx.lineTo(x,WORLD.surface+waveOff(x,t));
  ctx.lineTo(x1,cam.sy+H+120);ctx.closePath();
@@ -849,8 +925,47 @@ function drawTable(r,hue){
  ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,-r*0.58,r*1.15,r*0.3,0,0,TAU);ctx.fill();
  ctx.fillStyle='rgba(255,255,255,0.3)';
  for(let i=0;i<6;i++){ctx.beginPath();ctx.arc(-r*0.8+i*r*0.32,-r*0.62,2,0,TAU);ctx.fill();}}
-function drawClusterItem(cx,it,t){ctx.save();
- ctx.translate(cx+it.dx,terrainY(cx+it.dx)+4);
+function plantRow(span,m){const slot=span/m,items=[];
+ for(let k=0;k<m;k++)items.push({
+  dx:-span/2+slot*(k+0.5)+rand(-slot*0.1,slot*0.1),
+  type:irand(0,5),r:Math.min(rand(24,50),slot*0.5),
+  hue:pick(CORAL_PAL),ph:rand(TAU)});
+ return items;}
+function drawTankPickup(tp,t){
+ const bob=Math.sin(t*2.2+tp.x*0.01)*3;
+ ctx.save();ctx.translate(tp.x,tp.y+bob);
+ ctx.globalCompositeOperation='lighter';
+ const g=ctx.createRadialGradient(0,0,2,0,0,42);
+ g.addColorStop(0,'rgba(155,232,255,0.35)');g.addColorStop(1,'rgba(155,232,255,0)');
+ ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,42,0,TAU);ctx.fill();
+ ctx.globalCompositeOperation='source-over';
+ ctx.fillStyle='#ffd23f';rr(-9,-17,18,34,8);ctx.fill();
+ ctx.fillStyle='rgba(255,255,255,0.45)';rr(-6,-13,5,24,2);ctx.fill();
+ ctx.fillStyle='#8a97a8';rr(-4,-23,8,7,2);ctx.fill();
+ ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=1.4;
+ ctx.beginPath();ctx.arc(0,0,26+Math.sin(t*3)*2,0,TAU);ctx.stroke();
+ ctx.restore();}
+function drawWall(w2){
+ const RM=OC().rockMid;
+ for(const sg of w2.segs){
+  const x=w2.x-w2.w/2,y=sg.y,h=w2.segH+2;
+  const g=ctx.createLinearGradient(x,0,x+w2.w,0);
+  g.addColorStop(0,shade(RM,34));g.addColorStop(0.5,shade(RM,10));g.addColorStop(1,shade(RM,-16));
+  ctx.fillStyle=g;rr(x,y,w2.w,h,14);ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,0.06)';
+  for(let i2=0;i2<3;i2++){const bx=x+((i2*53)%Math.max(20,w2.w-30))+12;
+   ctx.beginPath();ctx.arc(bx,y+22+((i2*37)%70),3,0,TAU);ctx.fill();}
+  if(sg.exposed){ctx.fillStyle=shade(RM,110);rr(x+2,y-5,w2.w-4,18,9);ctx.fill();
+   ctx.fillStyle='rgba(255,255,255,0.25)';rr(x+6,y-3,w2.w-12,4,2);ctx.fill();}}
+ for(const L of w2.ledges){
+  const x=L.x-L.w/2;
+  const g=ctx.createLinearGradient(0,L.y,0,L.y+26);
+  g.addColorStop(0,shade(RM,26));g.addColorStop(1,shade(RM,-18));
+  ctx.fillStyle=g;rr(x,L.y,L.w,26,12);ctx.fill();
+  ctx.fillStyle=shade(RM,110);rr(x+2,L.y-4,L.w-4,12,6);ctx.fill();}}
+function drawClusterItem(cx,it,t,by){ctx.save();
+ ctx.translate(cx+it.dx,by!==undefined?by:terrainY(cx+it.dx)+4);
  ctx.rotate(Math.sin(t*0.5+it.ph)*0.02);
  if(it.type===0)drawBranchCoral(it.r,it.hue);
  else if(it.type===1)drawBrainCoral(it.r,it.hue);
@@ -897,6 +1012,9 @@ function drawEnv(t,showBoat){
  drawSand(t);
  for(const b of boulders)drawBoulder(b,t);
  for(const ob of obstacles)drawObstacle(ob);
+ for(const w2 of walls)drawWall(w2);
+ for(const c of wallFlora)for(const it of c.items)drawClusterItem(c.x,it,t,c.y);
+ for(const tp of tankPickups)if(!tp.taken)drawTankPickup(tp,t);
  for(const cl of clusters)for(const it of cl.items)drawClusterItem(cl.x,it,t);
  for(const k of kelp)drawKelp(k,t);
  for(const p2 of pods)drawPod(p2,t);
@@ -1372,11 +1490,16 @@ function updChef(dt){const q=night.queue[0];if(!q)return;
  night.chefP+=dt/2.6;
  if(night.chefP>=1){night.chefP=0;night.queue.shift();night.pass.push(q.id);
   AUDIO.bubble();
-  if(q.c&&q.c.state==='wait')q.c.ready=true;}}
+  if(q.c&&q.c.state==='wait'){q.c.ready=true;
+   night.resPass[q.id]=(night.resPass[q.id]||0)+1;}}}
 function tryServe(c){
  if(!c.ready){stageFloat(c.tx,368,'cooking…','#ffe9c4');AUDIO.ui();return;}
  const pi=night.pass.indexOf(c.want);
- if(pi<0){c.ready=false;return;}
+ if(pi<0){c.ready=false;
+  if(canOrder(c.want)){placeOrder(c,c.want);
+   if(!c.ready)stageFloat(c.tx,368,'remaking\u2026','#ffe9c4');}
+  else{c.state='noFood';c.t=0;}
+  return;}
  night.pass.splice(pi,1);
  if((night.resPass[c.want]||0)>0)night.resPass[c.want]--;
  c.state='serving';c.t=0;c.tipFrac=clamp(c.patience/22,0,1);AUDIO.serve();}
@@ -1975,13 +2098,34 @@ function drawGunTrim(w){
   ctx.beginPath();ctx.moveTo(38,0);ctx.lineTo(50,0);ctx.stroke();
   ctx.beginPath();ctx.moveTo(44,-6);ctx.lineTo(44,6);ctx.stroke();}
  else if(w==='ray'){
-  ctx.fillStyle='#c94f3d';rr(14,-7,26,13,6);ctx.fill();
-  ctx.fillStyle='#e8e2d4';
-  for(const gx2 of[28,35]){ctx.beginPath();ctx.ellipse(gx2,0,2,8,0,0,TAU);ctx.fill();}
-  ctx.fillStyle='#c94f3d';ctx.beginPath();
-  ctx.moveTo(20,-7);ctx.lineTo(26,-14);ctx.lineTo(32,-7);ctx.closePath();ctx.fill();
-  ctx.shadowColor='#6dff9e';ctx.shadowBlur=8;
-  ctx.fillStyle='#8dffb0';ctx.beginPath();ctx.arc(45,0,3.2,0,TAU);ctx.fill();
+  ctx.fillStyle='#262d3b';rr(8,-6.5,42,13,5);ctx.fill();
+  ctx.strokeStyle='#e8e2d4';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(11,-6.5);ctx.lineTo(48,-6.5);ctx.stroke();
+  ctx.fillStyle='#c94f3d';rr(15,-0.5,28,7.5,3);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.55)';rr(15,-0.5,28,1.6,1);ctx.fill();
+  ctx.fillStyle='#8e2f3a';ctx.beginPath();ctx.arc(9,-1,6,0,TAU);ctx.fill();
+  ctx.strokeStyle='#e8e2d4';ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.arc(9,-1,3.6,0,TAU);ctx.stroke();
+  ctx.fillStyle='#1a202c';ctx.beginPath();ctx.arc(9,-1,1.5,0,TAU);ctx.fill();
+  ctx.shadowColor='#6dff9e';ctx.shadowBlur=6;
+  ctx.fillStyle='#7cf28c';
+  for(const gx2 of[19,27,35]){rr(gx2,-11.5,6,6.5,2);ctx.fill();}
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='#3a4152';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(13,-6);ctx.lineTo(13,-15);ctx.stroke();
+  ctx.shadowColor='#6dff9e';ctx.shadowBlur=5;
+  ctx.fillStyle='#8dffb0';rr(11.7,-18,2.6,4,1.2);ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.save();ctx.translate(31,-4);ctx.rotate(Math.PI/4);
+  ctx.fillStyle='#ffd23f';ctx.fillRect(-1.7,-1.7,3.4,3.4);ctx.restore();
+  ctx.fillStyle='#c94f3d';
+  ctx.beginPath();ctx.moveTo(50,-5.5);ctx.lineTo(58,-3.4);ctx.lineTo(58,3.4);ctx.lineTo(50,5.5);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#e8e2d4';rr(56.4,-4,2,8,1);ctx.fill();
+  ctx.strokeStyle='#262d3b';ctx.lineWidth=2.6;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(58,-3.4);ctx.quadraticCurveTo(66,-6,68,-2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(58,3.4);ctx.quadraticCurveTo(66,6,68,2);ctx.stroke();
+  ctx.shadowColor='#6dff9e';ctx.shadowBlur=9;
+  ctx.fillStyle='#8dffb0';ctx.beginPath();ctx.arc(65,0,3.4,0,TAU);ctx.fill();
   ctx.shadowBlur=0;}}
 function drawNet(f){const R=f.t.s*(f.sm||1)+10;
  ctx.save();ctx.translate(f.x,f.y);
@@ -2087,8 +2231,8 @@ function wepCard(x,y,w,it){
   ctx.beginPath();ctx.moveTo(57,0);ctx.lineTo(47,-4.4);ctx.lineTo(47,4.4);ctx.closePath();ctx.fill();}
  ctx.restore();
  ctx.textAlign='left';ctx.textBaseline='middle';
- ctx.font=`800 15px ${FB}`;ctx.fillStyle='#fff6e8';ctx.fillText(it.name,x+78,y+22);
- ctx.font=`700 11px ${FN}`;ctx.fillStyle='rgba(255,246,232,0.62)';ctx.fillText(it.desc,x+78,y+44);
+ ctx.font=`800 15px ${FB}`;ctx.fillStyle='#fff6e8';ctx.fillText(it.name,x+86,y+22);
+ ctx.font=`700 11px ${FN}`;ctx.fillStyle='rgba(255,246,232,0.62)';ctx.fillText(it.desc,x+86,y+44);
  if(eq){ctx.fillStyle='#ffd23f';ctx.font=`800 12px ${FN}`;
   ctx.textAlign='center';ctx.fillText('EQUIPPED',x+w/2,y+94);}
  else if(owned){if(button(x+10,y+82,w-20,24,'Equip',{size:12})){
